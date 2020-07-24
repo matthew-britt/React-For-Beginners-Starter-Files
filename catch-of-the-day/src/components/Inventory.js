@@ -1,14 +1,88 @@
 import React from "react";
+import PropTypes from "prop-types";
+import firebase, { firestore } from "firebase";
 import AddFishForm from "./AddFishForm";
+import EditFishForm from "./EditFishForm";
+import Login from "./Login";
+import Base, { firebaseApp } from "../Base";
 
 class Inventory extends React.Component {
- 
+  static propTypes = {
+    fishes: PropTypes.object,
+    updateFish: PropTypes.func,
+    deleteFish: PropTypes.func,
+    loadSampleFishes: PropTypes.func,
+  };
+
+  state = {
+    uid: null,
+    owner: null,
+  };
+
+  componentDidMount() {
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        this.authHandler({ user });
+      }
+    });
+  };
+  
+  authHandler = async (authData) => {
+    const store = await Base.fetch(this.props.storeId, { context: this });
+    if (!store.owner) {
+      await Base.post(`${this.props.storeId}/owner`, {
+        data: authData.user.uid,
+      });
+    }
+    this.setState({
+      uid: authData.user.uid,
+      owner: store.owner || authData.user.uid,
+    });
+    console.log(store);
+    console.log(authData);
+  };
+
+  authenticate = (provider) => {
+    const authProvider = new firebase.auth[`${provider}AuthProvider`]();
+    firebaseApp.auth().signInWithPopup(authProvider).then(this.authHandler);
+  };
+
+  logout = async () => {
+    await firebase.auth().signOut();
+    this.setState({ uid: null });
+  };
+
   render() {
+    const logout = <button onclick={this.logout}>Log Out!</button>;
+
+    if (!this.state.uid) {
+      return <Login authenticate={this.authenticate} />;
+    }
+    if (this.state.uid !== this.state.owner) {
+      return (
+        <div>
+          <p>Sorry you are not the owner!</p>
+          {logout}
+        </div>
+      );
+    }
     return (
       <div className="inventory">
         <h2>Inventory</h2>
-        <AddFishForm addFish={this.props.addFish}/>
-        <button onClick={this.props.loadSampleFishes}>Load Sample Fishes</button>
+        {logout}
+        {Object.keys(this.props.fishes).map((key) => (
+          <EditFishForm
+            key={key}
+            index={key}
+            fish={this.props.fishes[key]}
+            updateFish={this.props.updateFish}
+            deleteFish={this.props.deleteFish}
+          />
+        ))}
+        <AddFishForm addFish={this.props.addFish} />
+        <button onClick={this.props.loadSampleFishes}>
+          Load Sample Fishes
+        </button>
       </div>
     );
   }
